@@ -1,0 +1,42 @@
+{
+  "name": "distributed-health-synthetic-monitoring",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend services for distributed health and synthetic monitoring.",
+  "type": "module",
+  "scripts": {
+    "dev:api": "node --watch src/api/server.js",
+    "dev:worker": "node --watch src/worker/index.js",
+    "start:api": "node src/api/server.js",
+    "start:worker": "node src/worker/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^9.1.0",
+    "@fastify/rate-limit": "^10.2.2",
+    "@prisma/client": "^6.14.0",
+    "bcryptjs": "^3.0.2",
+    "bullmq": "^5.56.0",
+    "fastify": "^5.4.0",
+    "fastify-plugin": "^5.0.1",
+    "ioredis": "^5.7.0",
+    "mongoose": "^9.9.4",
+    "pino": "^9.9.0",
+    "socket.io": "^4.8.1",
+    "zod": "^4.0.17"
+  },
+  "devDependencies": {
+    "eslint": "^9.33.0",
+    "prisma": "^6.14.0"
+  }
+}

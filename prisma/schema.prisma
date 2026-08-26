@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  RESPONDER
+  VIEWER
+}
+enum MonitorType {
+  HTTP
+  TCP
+  DNS
+}
+enum MonitorStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+enum IncidentStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+  ACKNOWLEDGED
+  RESOLVED
+}
+enum ChannelType {
+  SLACK
+  DISCORD
+  WEBHOOK
+  PAGERDUTY
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  members   Membership[]
+  monitors  Monitor[]
+  incidents Incident[]
+  statusPages StatusPage[]
+  alertChannels AlertChannel[]
+  maintenanceWindows MaintenanceWindow[]
+}
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  passwordHash String
+  createdAt DateTime @default(now())
+  memberships Membership[]
+}
+model Membership {
+  id             String @id @default(cuid())
+  userId         String
+  organizationId String
+  role           Role   @default(VIEWER)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+}
+model Monitor {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  type           MonitorType
+  target         String
+  config         Json
+  intervalSeconds Int @default(60)
+  timeoutMs      Int @default(5000)
+  failureThreshold Int @default(3)
+  status         MonitorStatus @default(HEALTHY)
+  enabled        Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  results        ProbeResult[]
+  incidents      Incident[]
+  @@index([organizationId, enabled, updatedAt])
+}
+model ProbeResult {
+  id           String @id @default(cuid())
+  monitorId    String
+  checkedAt    DateTime @default(now())
+  success      Boolean
+  statusCode   Int?
+  latencyMs    Int?
+  error        String?
+  requestMeta  Json?
+  responseMeta Json?
+  monitor      Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  @@index([monitorId, checkedAt])
+}
+model Incident {
+  id             String @id @default(cuid())
+  organizationId String
+  monitorId      String
+  status         IncidentStatus
+  startedAt      DateTime @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  lastNotifiedAt DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  monitor      Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  @@index([organizationId, status, startedAt])
+  @@index([monitorId, status])
+}
+model AlertChannel {
+  id             String @id @default(cuid())
+  organizationId String
+  type           ChannelType
+  name           String
+  config         Json
+  enabled        Boolean @default(true)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+model MaintenanceWindow {
+  id             String @id @default(cuid())
+  organizationId String
+  startsAt       DateTime
+  endsAt         DateTime
+  reason         String?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@index([organizationId, startsAt, endsAt])
+}
+model StatusPage {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String @unique
+  published      Boolean @default(false)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
