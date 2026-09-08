@@ -14,3 +14,10 @@ const schema = z.object({
 });
 
 export const env = schema.parse(process.env);
+
+export const requestSchema = z.object({
+  url: z.string({
+    required_error: "URL is completely missing",
+    invalid_type_error: "URL must be a valid string value"
+  }).url({ message: "URL is malformed or invalid" })
+});
