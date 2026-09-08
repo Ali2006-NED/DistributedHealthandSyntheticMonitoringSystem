@@ -1,80 +1,136 @@
-import { userModel } from '../models/user.model'
-import { bcrypt } from 'bcryptjs'
+import bcrypt from 'bcryptjs';
+import { prisma } from '../../lib/prisma.js';
 
-const jwt = require('jsonwebtoken')
+/**
+ * Register a new user and create membership for organization
+ * POST /v1/auth/register
+ * Body: { email, password, organizationId }
+ * @param {*} req
+ * @param {*} res
+ * @returns {Promise<void>}
+ */
+export async function registerUser(req, res) {
+  const { email, password, organizationId } = req.body;
 
-async function registerUser(req, res) {
+  // Check if user already exists
+  const userAlreadyExists = await prisma.user.findUnique({
+    where: { email }
+  });
 
-    const { email, role = "user", password } = req.body
+  if (userAlreadyExists) {
+    return res.status(400).json({ error: 'User already exists' });
+  }
 
-    const userAlreadyExists = await userModel.findOne({ email });
-    if (userAlreadyExists) {
-        return res.status(409).json({ message: "user already exists" })
+  // Hash password
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // Create user in PostgreSQL
+  const user = await prisma.user.create({
+    data: {
+      email,
+      passwordHash
     }
+  });
 
-    const hash = bcrypt.hash(password, 10);
-    const user = await userModel.create({
-        email,
-        password: hash,
-        role
-    })
+  // Create membership linking user to organization with OWNER role for first user
+  const membership = await prisma.membership.create({
+    data: {
+      userId: user.id,
+      organizationId,
+      role: 'OWNER' // First user gets owner role
+    }
+  });
 
-    const token = jwt.sign({
-        id: user._id,
-        role: user.role,
-    }, process.env.JWT_SECRET)
-
-    res.cookie('token', token)
-
-    res.status(201).json({
-        message: "User registered successfully",
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-        }
-    })
+  return res.status(201).json({
+    id: user.id,
+    email: user.email,
+    organizationId,
+    role: membership.role
+  });
 }
 
-async function logIn(req, res) {
-    const { email, password, role } = req.body
+/**
+ * Login user and return JWT token
+ * POST /v1/auth/login
+ * Body: { email, password }
+ * @param {*} req
+ * @param {*} res
+ * @returns {Promise<void>}
+ */
+export async function logIn(req, res) {
+  const { email, password } = req.body;
 
-    const user = await userModel.findOne({ email })
-
-    if (!user) {
-        res.status(401).json({ message: "Invalid Credentials" })
+  // Query user by email from PostgreSQL
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: {
+      memberships: {
+        include: { organization: true }
+      }
     }
+  });
 
-    const isPasswordValid = bcrypt.compare(password, user.password)
+  if (!user) {
+    return res.status(400).json({ error: 'Invalid credentials' });
+  }
 
-    if (!isPasswordValid) {
-        res.status(401).json({ message: "Invalid Credentials" })
-    }
+  // Verify password
+  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
-    const token = jwt.sign({
-        id: user._id,
-        role: user.role,
+  if (!isPasswordValid) {
+    return res.status(400).json({ error: 'Invalid credentials' });
+  }
 
-    }, process.env.JWT_SECRET)
+  // Get first membership (organization context)
+  const membership = user.memberships[0];
+  if (!membership) {
+    return res.status(400).json({ error: 'User has no organization membership' });
+  }
 
-    res.cookie('token', token)
-
-    res.status(201).json({
-        message: "User logged in successfully",
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-        }
-    })
-
+  return res.status(200).json({
+    id: user.id,
+    email: user.email,
+    organizationId: membership.organizationId,
+    role: membership.role
+  });
 }
 
-async function logOut(req, res) {
+/**
+ * Get user by ID from PostgreSQL
+ * Used for JWT verification and profile fetches
+ */
+export async function getUserById(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      memberships: {
+        include: { organization: true }
+      }
+    }
+  });
 
-    
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  return user;
 }
 
-module.exports = { registerUser, logIn };
+/**
+ * Verify user membership in organization
+ * Returns membership with role for RBAC checks
+ */
+export async function getMembership(userId, organizationId) {
+  const membership = await prisma.membership.findUnique({
+    where: {
+      userId_organizationId: { userId, organizationId }
+    },
+    include: { organization: true }
+  });
+
+  if (!membership) {
+    throw new Error('User is not a member of this organization');
+  }
+
+  return membership;
+}
