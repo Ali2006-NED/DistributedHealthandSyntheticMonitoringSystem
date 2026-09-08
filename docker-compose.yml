@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: monitoring
-      POSTGRES_PASSWORD: monitoring
-      POSTGRES_DB: monitoring
+      POSTGRES_USER: Monitoring
+      POSTGRES_PASSWORD: aliahmed2006
+      POSTGRES_DB: Monitoring
     ports:
       - "5432:5432"
     volumes:
