@@ -55,6 +55,7 @@ model User {
   passwordHash String
   createdAt DateTime @default(now())
   memberships Membership[]
+  refreshTokens RefreshToken[]
 }
 model Membership {
   id             String @id @default(cuid())
@@ -137,6 +138,20 @@ model StatusPage {
   slug           String @unique
   published      Boolean @default(false)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  replacedById   String?
+  createdByIp    String?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, revokedAt])
 }
 
 
