@@ -1,9 +1,6 @@
-import express from 'express' // Removed the curly braces here
-import { authController } from '../controllers/auth.controller' 
+import * as authController from '../controllers/auth.controller.js';
 
-const router = express.Router() 
-
-router.post('/register', authController.registerUser) 
-router.post('/login', authController.logIn)
-
-export default router
+export default async function authRoutes(app) {
+  app.post('/register', authController.registerUser);
+  app.post('/login', authController.logIn);
+}

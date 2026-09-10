@@ -1,52 +1,81 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
 
+function createSlug(value) {
+  let slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 60);
+
+  while (slug.startsWith('-')) slug = slug.slice(1);
+  while (slug.endsWith('-')) slug = slug.slice(0, -1);
+  return slug;
+}
+
 /**
- * Register a new user and create membership for organization
+ * Register a new user and create their organization and owner membership.
  * POST /v1/auth/register
- * Body: { email, password, organizationId }
+ * Body: { email, password, organizationName, organizationSlug? }
  * @param {*} req
  * @param {*} res
  * @returns {Promise<void>}
  */
-export async function registerUser(req, res) {
-  const { email, password, organizationId } = req.body;
+export async function registerUser(request, reply) {
+  const { email, password, organizationName, organizationSlug } = request.body;
 
-  // Check if user already exists
+  if (!email || !password || !organizationName) {
+    return reply.code(400).send({ error: 'email, password, and organizationName are required' });
+  }
+
+  const slug = createSlug(organizationSlug || organizationName);
+  if (!slug) {
+    return reply.code(400).send({ error: 'organizationName must contain letters or numbers' });
+  }
+
   const userAlreadyExists = await prisma.user.findUnique({
     where: { email }
   });
 
   if (userAlreadyExists) {
-    return res.status(400).json({ error: 'User already exists' });
+    return reply.code(400).send({ error: 'User already exists' });
   }
 
-  // Hash password
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // Create user in PostgreSQL
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash
-    }
-  });
+  try {
+    const { user, organization, membership } = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: { name: organizationName.trim(), slug }
+      });
+      const user = await tx.user.create({ data: { email, passwordHash } });
+      const membership = await tx.membership.create({
+        data: { userId: user.id, organizationId: organization.id, role: 'OWNER' }
+      });
+      return { user, organization, membership };
+    });
 
-  // Create membership linking user to organization with OWNER role for first user
-  const membership = await prisma.membership.create({
-    data: {
+    const token = await reply.jwtSign({
       userId: user.id,
-      organizationId,
-      role: 'OWNER' // First user gets owner role
-    }
-  });
+      organizationId: organization.id,
+      role: membership.role
+    });
 
-  return res.status(201).json({
-    id: user.id,
-    email: user.email,
-    organizationId,
-    role: membership.role
-  });
+    reply.setCookie('token', token);
+
+    return reply.code(201).send({
+      id: user.id,
+      email: user.email,
+      organizationId: organization.id,
+      organizationName: organization.name,
+      role: membership.role,
+    });
+  } catch (error) {
+    if (error.code === 'P2002' && error.meta?.target?.includes('slug')) {
+      return reply.code(409).send({ error: 'Organization slug already exists' });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -57,8 +86,8 @@ export async function registerUser(req, res) {
  * @param {*} res
  * @returns {Promise<void>}
  */
-export async function logIn(req, res) {
-  const { email, password } = req.body;
+export async function logIn(request, reply) {
+  const { email, password } = request.body;
 
   // Query user by email from PostgreSQL
   const user = await prisma.user.findUnique({
@@ -71,33 +100,43 @@ export async function logIn(req, res) {
   });
 
   if (!user) {
-    return res.status(400).json({ error: 'Invalid credentials' });
+    return reply.code(400).send({ error: 'Invalid credentials' });
   }
 
   // Verify password
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
   if (!isPasswordValid) {
-    return res.status(400).json({ error: 'Invalid credentials' });
+    return reply.code(400).send({ error: 'Invalid credentials' });
   }
 
   // Get first membership (organization context)
   const membership = user.memberships[0];
   if (!membership) {
-    return res.status(400).json({ error: 'User has no organization membership' });
+    return reply.code(400).send({ error: 'User has no organization membership' });
   }
 
-  return res.status(200).json({
+  const token = await reply.jwtSign({
+    userId: user.id,
+    organizationId: membership.organizationId,
+    role: membership.role
+  });
+
+  reply.setCookie('token', token);
+
+  return reply.code(200).send({
     id: user.id,
     email: user.email,
     organizationId: membership.organizationId,
-    role: membership.role
+    role: membership.role,
   });
 }
 
 /**
  * Get user by ID from PostgreSQL
  * Used for JWT verification and profile fetches
+ * @param {string} userId
+ * @returns {Promise<Object>} user
  */
 export async function getUserById(userId) {
   const user = await prisma.user.findUnique({
@@ -119,6 +158,9 @@ export async function getUserById(userId) {
 /**
  * Verify user membership in organization
  * Returns membership with role for RBAC checks
+ * @param {string} userId
+ * @param {string} organizationId
+ * @returns {Promise<Object>} membership
  */
 export async function getMembership(userId, organizationId) {
   const membership = await prisma.membership.findUnique({

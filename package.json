@@ -20,6 +20,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.2",
     "@fastify/jwt": "^9.1.0",

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -20,4 +22,4 @@ export const requestSchema = z.object({
     required_error: "URL is completely missing",
     invalid_type_error: "URL must be a valid string value"
   }).url({ message: "URL is malformed or invalid" })
-});
+}); 
