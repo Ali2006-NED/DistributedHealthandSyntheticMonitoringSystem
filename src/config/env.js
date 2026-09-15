@@ -2,7 +2,7 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const schema = z.object({
+export const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_HOST: z.string().default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(3000),
@@ -15,6 +15,8 @@ const schema = z.object({
   PROBE_CONCURRENCY: z.coerce.number().int().positive().default(10)
 });
 
+
+
 export const env = schema.parse(process.env);
 
 export const requestSchema = z.object({
@@ -23,3 +25,29 @@ export const requestSchema = z.object({
     invalid_type_error: "URL must be a valid string value"
   }).url({ message: "URL is malformed or invalid" })
 }); 
+
+export const registerSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+  organizationName: z.string().trim().min(1),
+  organizationSlug: z.string().trim().min(1).optional()
+});
+
+export const loginSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(1)
+});
+
+export function parseBody(schema, request, reply) {
+  const result = schema.safeParse(request.body);
+
+  if (!result.success) {
+    reply.code(400).send({
+      error: 'Invalid request body',
+      details: result.error.issues
+    });
+    return null;
+  }
+
+  return result.data;
+}
