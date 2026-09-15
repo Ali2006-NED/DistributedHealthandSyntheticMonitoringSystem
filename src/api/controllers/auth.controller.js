@@ -1,19 +1,11 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
 import { loginSchema, parseBody, registerSchema } from '../../config/env.js';
+import { getMembership, getUserById } from '../../domain/users/user.service.js';
 import { setAuthCookie } from '../utils/auth-cookie.js';
+import { createSlug } from '../utils/slug.js';
 
-function createSlug(value) {
-  let slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .slice(0, 60);
-
-  while (slug.startsWith('-')) slug = slug.slice(1);
-  while (slug.endsWith('-')) slug = slug.slice(0, -1);
-  return slug;
-}
+export { getMembership, getUserById };
 
 /**
  * Register a new user and create their organization and owner membership.
@@ -134,51 +126,6 @@ export async function logIn(request, reply) {
     organizationId: membership.organizationId,
     role: membership.role,
   });
-}
-
-/**
- * Get user by ID from PostgreSQL
- * Used for JWT verification and profile fetches
- * @param {string} userId
- * @returns {Promise<Object>} user
- */
-export async function getUserById(userId) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      memberships: {
-        include: { organization: true }
-      }
-    }
-  });
-
-  if (!user) {
-    throw new Error('User not found');
-  }
-
-  return user;
-}
-
-/**
- * Verify user membership in organization
- * Returns membership with role for RBAC checks
- * @param {string} userId
- * @param {string} organizationId
- * @returns {Promise<Object>} membership
- */
-export async function getMembership(userId, organizationId) {
-  const membership = await prisma.membership.findUnique({
-    where: {
-      userId_organizationId: { userId, organizationId }
-    },
-    include: { organization: true }
-  });
-
-  if (!membership) {
-    throw new Error('User is not a member of this organization');
-  }
-
-  return membership;
 }
 
 export async function logOut(request, reply) {
