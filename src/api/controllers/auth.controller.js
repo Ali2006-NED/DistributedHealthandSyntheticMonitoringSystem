@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
+import { setAuthCookie } from '../utils/auth-cookie.js';
 
 function createSlug(value) {
   let slug = value
@@ -61,7 +62,7 @@ export async function registerUser(request, reply) {
       role: membership.role
     });
 
-    reply.setCookie('token', token);
+    setAuthCookie(reply, token);
 
     return reply.code(201).send({
       id: user.id,
@@ -122,7 +123,7 @@ export async function logIn(request, reply) {
     role: membership.role
   });
 
-  reply.setCookie('token', token);
+  setAuthCookie(reply, token);
 
   return reply.code(200).send({
     id: user.id,
@@ -175,4 +176,10 @@ export async function getMembership(userId, organizationId) {
   }
 
   return membership;
+}
+
+export async function logOut(request, reply) {
+  reply.clearCookie('token',{path:'/'});
+  return reply.code(204).send();
+
 }
