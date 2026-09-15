@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
+import { loginSchema, parseBody, registerSchema } from '../../config/env.js';
 import { setAuthCookie } from '../utils/auth-cookie.js';
 
 function createSlug(value) {
@@ -23,11 +24,10 @@ function createSlug(value) {
  * @returns {Promise<void>}
  */
 export async function registerUser(request, reply) {
-  const { email, password, organizationName, organizationSlug } = request.body;
+  const input = parseBody(registerSchema, request, reply);
+  if (!input) return;
 
-  if (!email || !password || !organizationName) {
-    return reply.code(400).send({ error: 'email, password, and organizationName are required' });
-  }
+  const { email, password, organizationName, organizationSlug } = input;
 
   const slug = createSlug(organizationSlug || organizationName);
   if (!slug) {
@@ -35,21 +35,21 @@ export async function registerUser(request, reply) {
   }
 
   const userAlreadyExists = await prisma.user.findUnique({
-    where: { email }
+    where: { email: email.trim().toLowerCase() }
   });
 
   if (userAlreadyExists) {
     return reply.code(400).send({ error: 'User already exists' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
 
   try {
     const { user, organization, membership } = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
         data: { name: organizationName.trim(), slug }
       });
-      const user = await tx.user.create({ data: { email, passwordHash } });
+      const user = await tx.user.create({ data: { email: email.trim().toLowerCase(), passwordHash } });
       const membership = await tx.membership.create({
         data: { userId: user.id, organizationId: organization.id, role: 'OWNER' }
       });
@@ -88,11 +88,14 @@ export async function registerUser(request, reply) {
  * @returns {Promise<void>}
  */
 export async function logIn(request, reply) {
-  const { email, password } = request.body;
+  const input = parseBody(loginSchema, request, reply);
+  if (!input) return;
+
+  const { email, password } = input;
 
   // Query user by email from PostgreSQL
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { email: email.trim().toLowerCase() },
     include: {
       memberships: {
         include: { organization: true }
@@ -101,20 +104,20 @@ export async function logIn(request, reply) {
   });
 
   if (!user) {
-    return reply.code(400).send({ error: 'Invalid credentials' });
+    return reply.code(401).send({ error: 'Invalid credentials' });
   }
 
   // Verify password
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
   if (!isPasswordValid) {
-    return reply.code(400).send({ error: 'Invalid credentials' });
+    return reply.code(401).send({ error: 'Invalid credentials' });
   }
 
   // Get first membership (organization context)
   const membership = user.memberships[0];
   if (!membership) {
-    return reply.code(400).send({ error: 'User has no organization membership' });
+    return reply.code(401).send({ error: 'User has no organization membership' });
   }
 
   const token = await reply.jwtSign({
