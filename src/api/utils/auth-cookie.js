@@ -6,6 +6,6 @@ export function setAuthCookie(reply, cookie) {
     secure: env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 15 // 15 minutes
+    maxAge: 60 * Number.parseInt(env.JWT_EXPIRES_IN) // Convert JWT_EXPIRES_IN to number and multiply by 60 for seconds
   });
 }
