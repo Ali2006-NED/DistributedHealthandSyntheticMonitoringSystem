@@ -5,9 +5,9 @@
   "description": "Backend services for distributed health and synthetic monitoring.",
   "type": "module",
   "scripts": {
-    "dev:api": "node --watch src/api/server.js",
+    "dev:api": "node --watch server.js",
     "dev:worker": "node --watch src/worker/index.js",
-    "start:api": "node src/api/server.js",
+    "start:api": "node server.js",
     "start:worker": "node src/worker/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
