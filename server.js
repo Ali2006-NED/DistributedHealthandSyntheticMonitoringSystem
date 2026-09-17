@@ -13,6 +13,15 @@ import monitorRoutes from './src/api/routes/monitor.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(error);
+
+    const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
+    const message = statusCode === 500 ? 'Internal server error' : error.message;
+
+    return reply.code(statusCode).send({ error: message });
+  });
+
   await app.register(configPlugin);
   await app.register(cookie);
   await app.register(cors, { origin: app.config.CORS_ORIGIN,credentials: true });
