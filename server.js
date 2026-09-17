@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import { ZodError } from 'zod';
 import { Server } from 'socket.io';
 import configPlugin from './src/api/plugins/config.js';
 import authPlugin from './src/api/plugins/auth.js';
@@ -16,10 +17,16 @@ export async function buildApp() {
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
 
-    const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
-    const message = statusCode === 500 ? 'Internal server error' : error.message;
+    if (error instanceof ZodError) {
+    return reply.code(400).send({
+      error: 'Validation failed',
+      details: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }))
+    });
+  }
 
-    return reply.code(statusCode).send({ error: message });
+  const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
+  const message = statusCode === 500 ? 'Internal server error' : error.message;
+  return reply.code(statusCode).send({ error: message });
   });
 
   await app.register(configPlugin);
